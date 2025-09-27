@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
-# DARK Greeting (hardened) + Subscription expiry & days left
-# Guard for odd Pydroid globals:
-_y = None
-_Y = None
+"""
+DARK greeting module — importable and runnable as a script.
+Usage:
+  python dark_greet.py --expiry 05.10.2025
+  # or import and call: from dark_greet import dark_greet; dark_greet("05.10.2025")
+"""
 
-import os, sys, time, datetime
+# Guard some weird globals seen on certain mobile IDEs
+_y = None; _Y = None
+
+import os, sys, time, datetime, argparse, re
 
 # ===== ANSI =====
 RESET = "\033[0m"
@@ -19,7 +24,7 @@ PALETTE = [
 BOX_FG = "\033[38;5;246m"
 ACCENT = "\033[38;5;135m"
 
-def big(text: str) -> str:
+def _big(text: str) -> str:
     try:
         import pyfiglet
         try:
@@ -30,11 +35,10 @@ def big(text: str) -> str:
         bar = "═" * (len(text) + 6)
         return f"╔{bar}╗\n║   {text}   ║\n╚{bar}╝"
 
-def strip_ansi(s: str) -> str:
-    import re
+def _strip_ansi(s: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", s)
 
-def gradient(text: str, palette=PALETTE) -> str:
+def _gradient(text: str, palette=PALETTE) -> str:
     if not text:
         return text
     out, n, i = [], len(palette), 0
@@ -45,53 +49,66 @@ def gradient(text: str, palette=PALETTE) -> str:
             out.append(palette[i % n] + ch + RESET); i += 1
     return "".join(out)
 
-def boxify(lines):
-    width = max(len(strip_ansi(s)) for s in lines)
+def _box(lines):
+    width = max(len(_strip_ansi(s)) for s in lines) if lines else 0
     top = BOX_FG + "┏" + "━" * (width + 2) + "┓" + RESET
     bot = BOX_FG + "┗" + "━" * (width + 2) + "┛" + RESET
     body = []
     for s in lines:
-        pad = " " * (width - len(strip_ansi(s)))
+        pad = " " * (width - len(_strip_ansi(s)))
         body.append(BOX_FG + "┃ " + RESET + s + pad + BOX_FG + " ┃" + RESET)
     return "\n".join([top, *body, bot])
 
-def dark_divider(text="WELCOME"):
+def _divider(text="WELCOME"):
     core = f"  {text}  "
     line = "─" * 12
     return f"{DIM}{BOX_FG}{line}{RESET}{ACCENT}{core}{RESET}{DIM}{BOX_FG}{line}{RESET}"
 
-def clear():
+def _clear():
+    try: os.system("cls" if os.name == "nt" else "clear")
+    except Exception: pass
+
+def _parse_expiry(s: str) -> datetime.date:
+    """
+    Accepts dd.mm.yyyy or yyyy-mm-dd
+    """
+    s = s.strip()
+    for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
+        try:
+            return datetime.datetime.strptime(s, fmt).date()
+        except Exception:
+            pass
+    raise ValueError("Invalid expiry format. Use dd.mm.yyyy or yyyy-mm-dd")
+
+def _days_until(date_obj: datetime.date) -> int:
+    return (date_obj - datetime.date.today()).days
+
+def dark_greet(expiry_str: str = "05.10.2025") -> None:
+    """
+    Render the DARK greeting with expiry info.
+    """
     try:
-        os.system("cls" if os.name == "nt" else "clear")
+        expiry_date = _parse_expiry(expiry_str)
     except Exception:
-        pass
+        expiry_date = datetime.date(2025, 10, 5)
+        expiry_str  = "05.10.2025"
 
-def days_until(day: int, month: int, year: int) -> int:
-    try:
-        today = datetime.date.today()
-        target = datetime.date(year, month, day)
-        return (target - today).days
-    except Exception:
-        return 0
+    days_left = _days_until(expiry_date)
 
-# ===== Config =====
-SUB_EXPIRY = "05.10.2025"  # dd.mm.yyyy
-D_LEFT = days_until(5, 10, 2025)
+    _clear()
+    print(_gradient(_big("DARK")))
 
-def main():
-    clear()
-    print(gradient(big("DARK")))
-    greet_lines = [
+    lines = [
         ACCENT + BOLD + "Welcome to DARK Mode" + RESET,
         "✨ " + PALETTE[3] + "Dark Magic" + RESET + " — " + PALETTE[6] + "Calm Colors" + RESET + " — " + PALETTE[1] + "Muted Mood" + RESET,
-        ACCENT + f"Your subscription expires on: {SUB_EXPIRY}" + RESET,
-        (ACCENT + f"Days left: {max(D_LEFT,0)}" + RESET) if D_LEFT >= 0 else (ACCENT + "Subscription has expired." + RESET),
+        ACCENT + f"Your subscription expires on: {expiry_str}" + RESET,
+        (ACCENT + f"Days left: {max(days_left,0)}" + RESET) if days_left >= 0 else (ACCENT + "Subscription has expired." + RESET),
     ]
-    print(boxify(greet_lines))
+    print(_box(lines))
     print()
-    print(dark_divider("WELCOME"))
+    print(_divider("WELCOME"))
     print()
-    print(gradient("Enjoy the dark vibes and stay productive!"))
+    print(_gradient("Enjoy the dark vibes and stay productive!"))
     print()
 
     sys.stdout.write(DIM + BOX_FG + "Loading DARK theme: " + RESET)
@@ -103,7 +120,11 @@ def main():
     print("\n")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="DARK Greeting")
+    parser.add_argument("--expiry", default="05.10.2025",
+                        help="Expiry date (dd.mm.yyyy or yyyy-mm-dd). Default: 05.10.2025")
+    args = parser.parse_args()
     try:
-        main()
+        dark_greet(args.expiry)
     finally:
         print(RESET, end="")
